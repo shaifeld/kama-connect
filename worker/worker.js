@@ -15,7 +15,12 @@ const cors = {
 function reply(body, status) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: {
+      ...cors,
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 }
 
@@ -24,10 +29,14 @@ export default {
     if (req.headers.get("Origin") !== ORIGIN) return reply({ error: "forbidden" }, 403);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     if (req.method !== "POST") return reply({ error: "method" }, 405);
+    if (!(req.headers.get("Content-Type") || "").startsWith("application/json")) return reply({ error: "type" }, 415);
+    if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) return reply({ error: "not_configured" }, 500);
 
     let code;
     try {
-      const body = await req.json();
+      const text = await req.text();
+      if (text.length > 1000) return reply({ error: "too_large" }, 413);
+      const body = JSON.parse(text);
       code = body && body.code;
     } catch (e) {
       return reply({ error: "bad_json" }, 400);
@@ -36,17 +45,22 @@ export default {
       return reply({ error: "bad_code" }, 400);
     }
 
-    const r = await fetch("https://github.com/login/oauth/access_token", {
-      method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: env.GITHUB_CLIENT_ID,
-        client_secret: env.GITHUB_CLIENT_SECRET,
-        code,
-        redirect_uri: REDIRECT,
-      }),
-    });
-    const data = await r.json().catch(() => ({}));
+    let data = {};
+    try {
+      const r = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: env.GITHUB_CLIENT_ID,
+          client_secret: env.GITHUB_CLIENT_SECRET,
+          code,
+          redirect_uri: REDIRECT,
+        }),
+      });
+      data = await r.json();
+    } catch (e) {
+      return reply({ error: "github_unreachable" }, 502);
+    }
     if (!data.access_token) return reply({ error: data.error || "exchange_failed" }, 400);
     return reply({ access_token: data.access_token, scope: data.scope || "" }, 200);
   },
