@@ -1,6 +1,6 @@
 {
   "client_id": "Ov23ligHnhIY5sGAZph6",
-  "worker_url": "",
+  "worker_url": "https://kama-connect.sn0533122088.workers.dev",
   "moneyman_version": "",
   "redirect_uri": "https://shaifeld.github.io/kama-connect/"
 }
