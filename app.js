@@ -52,6 +52,8 @@
     try { await gh(`/repos/${S.login}/${REPO}/contents/${path}`); return true; } catch (e) { if (e.status === 404) return false; throw e; }
   }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // מאגר חדש לפעמים לא מוכן מיד — ניסיון חוזר עם השהיה
+  async function retry(fn, n = 6) { for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= n - 1 || ![404, 409, 422, 500, 502].includes(e.status)) throw e; await sleep(1500 * (i + 1)); } } }
 
   // שלב 1: כניסה לגיטהאב
   function step1() {
@@ -101,13 +103,13 @@
     if (repo && !repo.private) return fail(`המאגר ${REPO} קיים אצלך והוא ציבורי. מטעמי אבטחה לא ממשיכים. הפוך אותו לפרטי או מחק אותו, ונסה שוב.`);
     if (!repo) {
       await gh("/user/repos", { method: "POST", body: JSON.stringify({ name: REPO, private: true, auto_init: true, description: "נתוני כמה ע'ני עשיר (מוצפן)" }) });
-      await sleep(2500);
+      await retry(() => gh(`/repos/${S.login}/${REPO}/contents/README.md`));
     }
     S.isNew = !(await fileExists("kama/public.key"));
     if (S.isNew) {
       const kp = sodium.crypto_box_keypair();
       S.priv = sodium.to_base64(kp.privateKey, sodium.base64_variants.ORIGINAL);
-      await putFile("kama/public.key", sodium.to_base64(kp.publicKey, sodium.base64_variants.ORIGINAL), "public key");
+      await retry(() => putFile("kama/public.key", sodium.to_base64(kp.publicKey, sodium.base64_variants.ORIGINAL), "public key"));
     }
     step3();
   }
@@ -138,9 +140,9 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
     }
     $("save").disabled = true; $("save").textContent = "מצפין…";
     try {
-      const k = await gh(`/repos/${S.login}/${REPO}/actions/secrets/public-key`);
+      const k = await retry(() => gh(`/repos/${S.login}/${REPO}/actions/secrets/public-key`));
       const sealed = sodium.crypto_box_seal(sodium.from_string(JSON.stringify(creds)), sodium.from_base64(k.key, sodium.base64_variants.ORIGINAL));
-      await gh(`/repos/${S.login}/${REPO}/actions/secrets/KAMA_ACC_${id.toUpperCase()}`, { method: "PUT", body: JSON.stringify({ encrypted_value: sodium.to_base64(sealed, sodium.base64_variants.ORIGINAL), key_id: k.key_id }) });
+      await retry(() => gh(`/repos/${S.login}/${REPO}/actions/secrets/KAMA_ACC_${id.toUpperCase()}`, { method: "PUT", body: JSON.stringify({ encrypted_value: sodium.to_base64(sealed, sodium.base64_variants.ORIGINAL), key_id: k.key_id }) }));
       for (const f of Object.keys(creds)) creds[f] = "";
       if (!S.banks.includes(id)) S.banks.push(id);
       step3(`${BANKS[id][0]} נשמר. אפשר להוסיף עוד, או ללחוץ "סיימתי להוסיף".`);
@@ -154,7 +156,7 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
     const envs = Object.keys(BANKS).map((k) => `          KAMA_ACC_${k.toUpperCase()}: \${{ secrets.KAMA_ACC_${k.toUpperCase()} }}`).join("\n");
     const rnd = sodium.randombytes_buf(2);
     const cron = `${rnd[0] % 60} ${2 + (rnd[1] % 4)} * * *`;
-    await putFile("kama/run.mjs", run, "sync script");
+    await retry(() => putFile("kama/run.mjs", run, "sync script"));
     await putFile(".github/workflows/kama.yml", yml.replace("__CRON__", cron).replace("__ENVS__", envs), "daily sync");
     await sleep(1500);
     try { await gh(`/repos/${S.login}/${REPO}/actions/workflows/kama.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main" }) }); } catch (e) { /* ריצה ראשונה תקרה בזמן הקבוע */ }
