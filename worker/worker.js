@@ -24,9 +24,21 @@ function reply(body, status) {
   });
 }
 
+// הגבלת קצב פנימית: עד 10 בקשות בדקה לכל כתובת IP (לכל מופע של השרת)
+const hits = new Map();
+function limited(ip) {
+  const now = Date.now();
+  const arr = (hits.get(ip) || []).filter((t) => now - t < 60000);
+  arr.push(now);
+  hits.set(ip, arr);
+  if (hits.size > 5000) hits.clear();
+  return arr.length > 10;
+}
+
 export default {
   async fetch(req, env) {
     if (req.headers.get("Origin") !== ORIGIN) return reply({ error: "forbidden" }, 403);
+    if (req.method !== "OPTIONS" && limited(req.headers.get("CF-Connecting-IP") || "?")) return reply({ error: "rate_limited" }, 429);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     if (req.method !== "POST") return reply({ error: "method" }, 405);
     if (!(req.headers.get("Content-Type") || "").startsWith("application/json")) return reply({ error: "type" }, 415);
