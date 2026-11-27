@@ -14,14 +14,11 @@
     beinleumi: ["הבינלאומי", { username: "שם משתמש", password: "סיסמה" }],
     massad: ["מסד", { username: "שם משתמש", password: "סיסמה" }],
     pagi: ["פאגי", { username: "שם משתמש", password: "סיסמה" }],
-    union: ["איגוד", { username: "שם משתמש", password: "סיסמה" }],
     yahav: ["בנק יהב", { username: "שם משתמש", nationalID: "תעודת זהות", password: "סיסמה" }],
     max: ["מקס", { username: "שם משתמש", password: "סיסמה" }],
     visaCal: ["כאל", { username: "שם משתמש", password: "סיסמה" }],
     isracard: ["ישראכרט", { id: "תעודת זהות", card6Digits: "6 ספרות של הכרטיס", password: "סיסמה" }],
     amex: ["אמריקן אקספרס", { id: "תעודת זהות", card6Digits: "6 ספרות של הכרטיס", password: "סיסמה" }],
-    behatsdaa: ["בהצדעה", { id: "תעודת זהות", password: "סיסמה" }],
-    beyahadBishvilha: ["ביחד בשבילך", { id: "תעודת זהות", password: "סיסמה" }],
   };
   const S = { cfg: null, token: null, login: null, priv: null, isNew: false, banks: [] };
   const $ = (id) => document.getElementById(id);
@@ -178,21 +175,61 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
     const cron = `${rnd[0] % 60} ${2 + (rnd[1] % 4)} * * *`;
     await retry(() => putFile("kama/run.mjs", run, "sync script"));
     await putFile(".github/workflows/kama.yml", yml.replace("__CRON__", cron).replace("__ENVS__", envs), "daily sync");
+    // מפתח לשמירת אסימון הכניסה בין ריצות (כדי שהבנק לא יבקש SMS כל לילה) — נוצר פעם אחת
+    const have = ((await gh(`/repos/${S.login}/${REPO}/actions/secrets?per_page=100`)).secrets || []).map((x) => x.name);
+    if (!have.includes("KAMA_STATE_KEY")) {
+      const k = await retry(() => gh(`/repos/${S.login}/${REPO}/actions/secrets/public-key`));
+      const sk = sodium.to_base64(sodium.randombytes_buf(32), sodium.base64_variants.ORIGINAL);
+      const sealed = sodium.crypto_box_seal(sodium.from_string(sk), sodium.from_base64(k.key, sodium.base64_variants.ORIGINAL));
+      await retry(() => gh(`/repos/${S.login}/${REPO}/actions/secrets/KAMA_STATE_KEY`, { method: "PUT", body: JSON.stringify({ encrypted_value: sodium.to_base64(sealed, sodium.base64_variants.ORIGINAL), key_id: k.key_id }) }));
+    }
     await sleep(1500);
-    try { await retry(() => gh(`/repos/${S.login}/${REPO}/actions/workflows/kama.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main" }) }), 8); } catch (e) { /* ריצה ראשונה תקרה בזמן הקבוע */ }
+    const t0 = Date.now();
+    let started = false;
+    try { await retry(() => gh(`/repos/${S.login}/${REPO}/actions/workflows/kama.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main", inputs: { interactive: "true" } }) }), 8); started = true; } catch (e) { /* ריצה ראשונה תקרה בזמן הקבוע */ }
     const pack = JSON.stringify({ v: 1, r: `${S.login}/${REPO}`, t: S.token, k: S.priv || "" });
     const code = "KAMA1." + sodium.to_base64(sodium.from_string(pack), sodium.base64_variants.URLSAFE_NO_PADDING);
     const q = qrcode(0, "L"); q.addData(code); q.make();
     view(4, `<div class="card"><b class="ok">החיבור מוכן ✓</b>
 <p class="muted">המשיכה הראשונה רצה עכשיו ולוקחת כמה דקות.</p>
 ${S.isNew ? "" : `<p class="muted">המפתח הקיים נשמר. באפליקציה לא צריך לעשות כלום.</p>`}
+<div id="live" class="card"><p>${started ? "המשיכה רצה עכשיו. אם הבנק ישלח קוד SMS, תופיע כאן תיבה להקליד אותו." : "המשיכה תרוץ בלילה."}</p></div>
 <b>להעביר לאפליקציה</b><p class="muted">באפליקציה: תפריט ← חיבור בנק ← "הדבקת קוד" או "סריקה".</p>
 <div id="qr">${q.createImgTag(4, 8)}</div>
 <button id="cp">להעתיק קוד</button>
 <button class="ghost" id="fin">סיימתי — למחוק מהדף</button>
 <p class="muted">הקוד הזה הוא המפתח לנתונים שלך. לא לשלוח אותו לאף אחד.</p></div>`);
     $("cp").onclick = async () => { try { await navigator.clipboard.writeText(code); $("cp").textContent = "הועתק ✓"; } catch (e) { prompt("להעתיק:", code); } };
-    $("fin").onclick = () => { S.token = S.priv = null; app.innerHTML = `<h1>חיבור בנק</h1><div class="card"><p>הנתונים נמחקו מהדף. אפשר לסגור.</p></div>`; };
+    if (started) watchRun(t0);
+    $("fin").onclick = () => { S.live = false; S.token = S.priv = null; app.innerHTML = `<h1>חיבור בנק</h1><div class="card"><p>הנתונים נמחקו מהדף. אפשר לסגור.</p></div>`; };
+  }
+
+  // מעקב אחרי הריצה: מציג תיבה לקוד SMS כשהבנק מבקש, ואת התוצאה בסוף
+  async function getFile(path) { try { const j = await gh(`/repos/${S.login}/${REPO}/contents/${path}?t=${Date.now()}`); return decodeURIComponent(escape(atob(j.content.replace(/\n/g, "")))); } catch (e) { return null; } }
+  async function watchRun(t0) {
+    S.live = true; let asked = 0;
+    const live = (h) => { if ($("live")) $("live").innerHTML = h; };
+    while (S.live && Date.now() - t0 < 15 * 60e3) {
+      await sleep(4000);
+      const req = await getFile("kama/otp-request.json");
+      if (req) {
+        let r; try { r = JSON.parse(req); } catch (e) { r = null; }
+        if (r && r.at > t0 && r.at !== asked) {
+          asked = r.at;
+          live(`<b>הבנק שלח קוד SMS${r.hint ? " למספר שמסתיים ב-" + esc(r.hint) : ""}</b><label>להקליד את הקוד כאן<input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></label><button id="otpGo">לשלוח את הקוד</button><p class="muted">יש 5 דקות. הקוד מוצפן ונמחק מיד אחרי שימוש.</p>`);
+          await new Promise((res) => { $("otpGo").onclick = async () => {
+            const v = $("otp").value.trim(); if (!/^\d{4,10}$/.test(v)) { $("otp").focus(); return; }
+            $("otpGo").disabled = true;
+            try { const sealed = sodium.crypto_box_seal(sodium.from_string(v), sodium.from_base64(r.pk, sodium.base64_variants.ORIGINAL)); await putFile("kama/otp.enc", sodium.to_base64(sealed, sodium.base64_variants.ORIGINAL), "otp"); live("<p>הקוד נשלח. ממשיך למשוך…</p>"); } catch (e) { live('<p class="err">שליחת הקוד נכשלה. לנסות שוב בעוד רגע.</p>'); asked = 0; }
+            res();
+          }; });
+          continue;
+        }
+      }
+      const st = await getFile("status.json");
+      if (st) { let j; try { j = JSON.parse(st); } catch (e) { j = null; }
+        if (j && Date.parse(j.at) > t0 - 60e3) { live(`<b>${j.ok ? '<span class="ok">המשיכה הצליחה ✓</span>' : '<span class="err">המשיכה הסתיימה עם בעיה</span>'}</b>` + Object.entries(j.banks || {}).map(([k, v]) => `<p>${esc(BANKS[k] ? BANKS[k][0] : k)}: ${esc(v)}</p>`).join("")); return; } }
+    }
   }
 
   (async function init() {
