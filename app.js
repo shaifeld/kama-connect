@@ -66,6 +66,8 @@
     $("go").onclick = () => {
       const st = sodium.to_hex(sodium.randombytes_buf(24));
       sessionStorage.setItem("kst", st);
+      // גיבוי למקרה שהחזרה מגיטהאב נפתחת בלשונית אחרת (אפליקציית גיטהאב/אימות דו-שלבי); נמחק מיד בחזרה, תוקף 10 דקות
+      try { localStorage.setItem("kst", JSON.stringify({ st, at: Date.now() })); } catch (e) {}
       const u = new URL("https://github.com/login/oauth/authorize");
       u.searchParams.set("client_id", S.cfg.client_id);
       u.searchParams.set("redirect_uri", S.cfg.redirect_uri);
@@ -78,16 +80,18 @@
   // חזרה מגיטהאב: בדיקת state והחלפת קוד במפתח
   async function back(code, state) {
     history.replaceState(null, "", location.pathname);
-    const st = sessionStorage.getItem("kst");
+    let st = sessionStorage.getItem("kst");
     sessionStorage.removeItem("kst");
+    try { const L = JSON.parse(localStorage.getItem("kst") || "null"); localStorage.removeItem("kst"); if (!st && L && Date.now() - L.at < 600000) st = L.st; } catch (e) {}
     if (!st || st !== state) return fail("הכניסה לא אומתה. נסה שוב.");
     view(1, `<div class="card"><p>מתחבר…</p></div>`);
     let j;
     try {
-      const r = await fetch(S.cfg.worker_url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+      const ac = new AbortController(); setTimeout(() => ac.abort(), 20000);
+      const r = await fetch(S.cfg.worker_url, { signal: ac.signal, method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
       j = await r.json();
       if (!r.ok || !j.access_token) throw new Error(j.error || "exchange");
-    } catch (e) { return fail("החיבור לגיטהאב נכשל. נסה שוב."); }
+    } catch (e) { return fail("החיבור לגיטהאב נכשל (" + (e.name === "AbortError" ? "השרת לא ענה" : e.message) + "). נסה שוב."); }
     const sc = (j.scope || "").split(/[ ,]+/);
     if (!sc.includes("repo") || !sc.includes("workflow")) return fail("גיטהאב לא נתן את כל ההרשאות הנדרשות. נסה שוב ואשר את כולן.");
     S.token = j.access_token;
