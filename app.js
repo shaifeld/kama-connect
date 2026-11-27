@@ -124,6 +124,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <button id="save">להצפין ולשמור</button>
 ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</button>` : ""}
 <div id="have"></div>
+${S.isNew ? "" : `<label class="gap"><input type="checkbox" id="regen" ${S.regen ? "checked" : ""}> ליצור מפתח חדש לאפליקציה (אם הקוד מהפעם הקודמת לא הועבר לאפליקציה)</label>`}
 <p class="muted">הסיסמה מוצפנת במפתח של המאגר שלך, ואי אפשר לקרוא אותה חזרה גם מגיטהאב.</p></div>`);
     const draw = () => {
       $("flds").innerHTML = Object.entries(BANKS[$("bank").value][1]).map(([f, l]) =>
@@ -131,6 +132,7 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
     };
     $("bank").onchange = draw; draw();
     listHave();
+    if ($("regen")) $("regen").onchange = (e) => { S.regen = e.target.checked; };
     $("save").onclick = saveBank;
     if ($("done")) $("done").onclick = () => step4().catch((e) => fail("שגיאה בהפעלה: " + e.message));
   }
@@ -169,6 +171,11 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
   // שלב 4: משימה יומית, ריצה ראשונה, והעברה לאפליקציה
   async function step4() {
     view(4, `<div class="card"><p>מגדיר משיכה יומית…</p></div>`);
+    if (S.regen && !S.priv) {
+      const kp = sodium.crypto_box_keypair();
+      S.priv = sodium.to_base64(kp.privateKey, sodium.base64_variants.ORIGINAL);
+      await retry(() => putFile("kama/public.key", sodium.to_base64(kp.publicKey, sodium.base64_variants.ORIGINAL), "new public key"));
+    }
     const [yml, run, pkg, lock] = await Promise.all(["tpl/kama.yml", "tpl/run.mjs", "tpl/package.json", "tpl/package-lock.json"].map((p) => fetch(p, { cache: "no-store" }).then((r) => r.text())));
     const envs = Object.keys(BANKS).map((k) => `          KAMA_ACC_${k.toUpperCase()}: \${{ secrets.KAMA_ACC_${k.toUpperCase()} }}`).join("\n");
     const rnd = sodium.randombytes_buf(2);
@@ -194,7 +201,7 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
     const q = qrcode(0, "L"); q.addData(code); q.make();
     view(4, `<div class="card"><b class="ok">החיבור מוכן ✓</b>
 <p class="muted">המשיכה הראשונה רצה עכשיו ולוקחת כמה דקות.</p>
-${S.isNew ? "" : `<p class="muted">המפתח הקיים נשמר. באפליקציה לא צריך לעשות כלום.</p>`}
+${S.priv ? "" : `<p class="muted">המפתח הקיים נשמר. באפליקציה לא צריך לעשות כלום.</p>`}
 <div id="live" class="card"><p>${started ? "המשיכה רצה עכשיו. אם הבנק ישלח קוד SMS, תופיע כאן תיבה להקליד אותו." : "המשיכה תרוץ בלילה."}</p></div>
 <b>להעביר לאפליקציה</b><p class="muted">באפליקציה: תפריט ← חיבור בנק ← "הדבקת קוד" או "סריקה".</p>
 <div id="qr">${q.createImgTag(4, 8)}</div>
