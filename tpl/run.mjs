@@ -24,3 +24,4 @@ fs.writeFileSync("data/txns.enc", sodium.to_base64(sealed, sodium.base64_variant
 fs.writeFileSync("data/pulse.txt", out.at);
 fs.writeFileSync("status.json", JSON.stringify(status, null, 1));
 console.log("done", accs.length, "banks");
+process.exit(0);
