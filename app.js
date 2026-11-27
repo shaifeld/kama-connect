@@ -159,7 +159,7 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
     await retry(() => putFile("kama/run.mjs", run, "sync script"));
     await putFile(".github/workflows/kama.yml", yml.replace("__CRON__", cron).replace("__ENVS__", envs), "daily sync");
     await sleep(1500);
-    try { await gh(`/repos/${S.login}/${REPO}/actions/workflows/kama.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main" }) }); } catch (e) { /* ריצה ראשונה תקרה בזמן הקבוע */ }
+    try { await retry(() => gh(`/repos/${S.login}/${REPO}/actions/workflows/kama.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main" }) }), 8); } catch (e) { /* ריצה ראשונה תקרה בזמן הקבוע */ }
     const pack = JSON.stringify({ v: 1, r: `${S.login}/${REPO}`, t: S.token, k: S.priv || "" });
     const code = "KAMA1." + sodium.to_base64(sodium.from_string(pack), sodium.base64_variants.URLSAFE_NO_PADDING);
     const q = qrcode(0, "L"); q.addData(code); q.make();
