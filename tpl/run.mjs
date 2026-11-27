@@ -12,10 +12,10 @@ for (const [k, v] of accs) {
   let cfg; try { cfg = JSON.parse(v); } catch { status.banks[k] = "פרטים לא תקינים"; status.ok = false; continue; }
   const { companyId, ...creds } = cfg;
   try {
-    const sc = createScraper({ companyId, startDate: start, combineInstallments: false, showBrowser: false, args: ["--no-sandbox"] });
+    const sc = createScraper({ companyId, startDate: start, combineInstallments: false, showBrowser: false, defaultTimeout: 120000, args: ["--no-sandbox"] });
     const r = await sc.scrape(creds);
     if (r.success) { out.accounts.push({ companyId, accounts: r.accounts }); status.banks[companyId] = "תקין"; }
-    else { status.ok = false; status.banks[companyId] = r.errorType === "INVALID_PASSWORD" ? "סיסמה שגויה — לעדכן בדף ההקמה" : r.errorType === "CHANGE_PASSWORD" ? "הבנק מבקש להחליף סיסמה" : "נכשל (" + (r.errorType || "לא ידוע") + ")"; }
+    else { status.ok = false; status.banks[companyId] = r.errorType === "INVALID_PASSWORD" ? "סיסמה שגויה — לעדכן בדף ההקמה" : r.errorType === "CHANGE_PASSWORD" ? "הבנק מבקש להחליף סיסמה" : r.errorType === "TIMEOUT" ? "הבנק לא ענה בזמן (לפעמים פרטים שגויים, לפעמים עומס)" : "נכשל (" + (r.errorType || "לא ידוע") + ")"; }
   } catch (e) { status.ok = false; status.banks[companyId] = "נכשל (שגיאה בהרצה)"; }
 }
 fs.mkdirSync("data", { recursive: true });
