@@ -178,7 +178,7 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
     const [yml, run, pkg, lock] = await Promise.all(["tpl/kama.yml", "tpl/run.mjs", "tpl/package.json", "tpl/package-lock.json"].map((p) => fetch(p, { cache: "no-store" }).then((r) => r.text())));
     const envs = Object.keys(BANKS).map((k) => `          KAMA_ACC_${k.toUpperCase()}: \${{ secrets.KAMA_ACC_${k.toUpperCase()} }}`).join("\n");
     const rnd = sodium.randombytes_buf(2);
-    const cron = `${rnd[0] % 60} ${2 + (rnd[1] % 4)} * * *`;
+    const cron = `${rnd[0] % 60} 3,6,9,12,15,18,21 * * *`; // 7 פעמים ביום (כ-630 דקות בחודש מתוך 2,000 החינמיות)
     await retry(() => putFile("kama/run.mjs", run, "sync script"));
     await retry(() => putFile("kama/package.json", pkg, "deps"));
     await retry(() => putFile("kama/package-lock.json", lock, "deps lock"));
