@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 24
       - name: install
-        run: npm i --no-save --no-audit --no-fund @sergienko4/israeli-bank-scrapers@10.1.1 libsodium-wrappers@0.7.15 > /dev/null 2>&1
+        run: cp kama/package.json kama/package-lock.json . && npm ci --no-audit --no-fund > /dev/null 2>&1
       - name: git identity
         run: |
           git config user.name kama-bot
@@ -33,4 +33,4 @@ jobs:
           KAMA_INTERACTIVE: ${{ inputs.interactive }}
           KAMA_STATE_KEY: ${{ secrets.KAMA_STATE_KEY }}
 __ENVS__
-        run: node kama/run.mjs
+        run: node kama/run.mjs > /dev/null 2>&1

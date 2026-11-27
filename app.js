@@ -169,11 +169,13 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
   // שלב 4: משימה יומית, ריצה ראשונה, והעברה לאפליקציה
   async function step4() {
     view(4, `<div class="card"><p>מגדיר משיכה יומית…</p></div>`);
-    const [yml, run] = await Promise.all(["tpl/kama.yml", "tpl/run.mjs"].map((p) => fetch(p, { cache: "no-store" }).then((r) => r.text())));
+    const [yml, run, pkg, lock] = await Promise.all(["tpl/kama.yml", "tpl/run.mjs", "tpl/package.json", "tpl/package-lock.json"].map((p) => fetch(p, { cache: "no-store" }).then((r) => r.text())));
     const envs = Object.keys(BANKS).map((k) => `          KAMA_ACC_${k.toUpperCase()}: \${{ secrets.KAMA_ACC_${k.toUpperCase()} }}`).join("\n");
     const rnd = sodium.randombytes_buf(2);
     const cron = `${rnd[0] % 60} ${2 + (rnd[1] % 4)} * * *`;
     await retry(() => putFile("kama/run.mjs", run, "sync script"));
+    await retry(() => putFile("kama/package.json", pkg, "deps"));
+    await retry(() => putFile("kama/package-lock.json", lock, "deps lock"));
     await putFile(".github/workflows/kama.yml", yml.replace("__CRON__", cron).replace("__ENVS__", envs), "daily sync");
     // מפתח לשמירת אסימון הכניסה בין ריצות (כדי שהבנק לא יבקש SMS כל לילה) — נוצר פעם אחת
     const have = ((await gh(`/repos/${S.login}/${REPO}/actions/secrets?per_page=100`)).secrets || []).map((x) => x.name);
@@ -214,7 +216,7 @@ ${S.isNew ? "" : `<p class="muted">המפתח הקיים נשמר. באפליק�
       const req = await getFile("kama/otp-request.json");
       if (req) {
         let r; try { r = JSON.parse(req); } catch (e) { r = null; }
-        if (r && r.at > t0 && r.at !== asked) {
+        if (r && r.at > t0 && Date.now() - r.at < 5 * 60e3 && r.at !== asked) {
           asked = r.at;
           live(`<b>הבנק שלח קוד SMS${r.hint ? " למספר שמסתיים ב-" + esc(r.hint) : ""}</b><label>להקליד את הקוד כאן<input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></label><button id="otpGo">לשלוח את הקוד</button><p class="muted">יש 5 דקות. הקוד מוצפן ונמחק מיד אחרי שימוש.</p>`);
           await new Promise((res) => { $("otpGo").onclick = async () => {

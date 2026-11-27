@@ -13,6 +13,8 @@ const push = (msg) => { git("git add -A kama data status.json"); try { git(`git 
 const pk = sodium.from_base64(fs.readFileSync("kama/public.key", "utf8").trim(), B);
 const SK = process.env.KAMA_STATE_KEY ? sodium.from_base64(process.env.KAMA_STATE_KEY.trim(), B) : null;
 const INTERACTIVE = process.env.KAMA_INTERACTIVE === "true";
+// ניקוי שאריות קוד SMS מריצה קודמת שנקטעה
+for (const f of ["kama/otp.enc", "kama/otp-request.json"]) { try { fs.rmSync(f); } catch {} }
 let state = {};
 try { if (SK && fs.existsSync("data/state.enc")) { const raw = sodium.from_base64(fs.readFileSync("data/state.enc", "utf8").trim(), B); state = JSON.parse(sodium.to_string(sodium.crypto_secretbox_open_easy(raw.slice(24), raw.slice(0, 24), SK))); } } catch { state = {}; }
 
@@ -48,7 +50,7 @@ for (const [, v] of accs) {
   const { companyId, ...creds } = cfg;
   if (state[companyId]) creds.otpLongTermToken = state[companyId];
   let otpErr = "";
-  const otpCodeRetriever = async (hint) => { try { return await askOtp(companyId, hint); } catch (e) { otpErr = e.message; throw e; } };
+  const otpCodeRetriever = async (hint) => { try { return await askOtp(companyId, hint); } catch (e) { otpErr = e.message; throw e; } finally { for (const f of ["kama/otp.enc", "kama/otp-request.json"]) { try { fs.rmSync(f); } catch {} } } };
   try {
     const sc = createScraper({ companyId, startDate: start, otpCodeRetriever });
     const r = await sc.scrape({ ...creds, otpCodeRetriever });
