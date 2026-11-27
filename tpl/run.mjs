@@ -52,7 +52,7 @@ for (const [, v] of accs) {
   let otpErr = "";
   const otpCodeRetriever = async (hint) => { try { return await askOtp(companyId, hint); } catch (e) { otpErr = e.message; throw e; } finally { for (const f of ["kama/otp.enc", "kama/otp-request.json"]) { try { fs.rmSync(f); } catch {} } } };
   try {
-    const full = !state["full:" + companyId]; // פעם ראשונה לכל בנק: שנה אחורה
+    const full = process.env.KAMA_FULL === "true" || !state["full:" + companyId]; // פעם ראשונה לכל בנק: שנה אחורה
     const sc = createScraper({ companyId, startDate: full ? new Date(Date.now() - 365 * 864e5) : start, otpCodeRetriever });
     const r = await sc.scrape({ ...creds, otpCodeRetriever });
     if (r.success) {

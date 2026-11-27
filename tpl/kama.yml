@@ -8,6 +8,10 @@ on:
         description: "ריצה מהדף (אפשר לבקש קוד SMS)"
         type: boolean
         default: false
+      full:
+        description: "שנה אחורה"
+        type: boolean
+        default: false
 permissions:
   contents: write
 concurrency:
@@ -31,6 +35,7 @@ jobs:
       - name: sync
         env:
           KAMA_INTERACTIVE: ${{ inputs.interactive }}
+          KAMA_FULL: ${{ inputs.full }}
           KAMA_STATE_KEY: ${{ secrets.KAMA_STATE_KEY }}
 __ENVS__
         run: node kama/run.mjs > /dev/null 2>&1
