@@ -10,3 +10,4 @@ label{display:block;margin-top:12px;font-size:15px;color:var(--muted)}
 input,select{width:100%;min-height:48px;border-radius:10px;border:1px solid #444;background:#1C1D21;color:var(--txt);font-size:17px;padding:0 12px;margin-top:4px}
 ul{padding-inline-start:20px}#qr{background:#fff;padding:10px;border-radius:10px;width:max-content;margin:12px auto}#qr img{display:block}
 code{word-break:break-all;font-size:12px;background:#111;padding:6px;border-radius:8px;display:block;direction:ltr;text-align:left}
+.gap{margin-top:16px}

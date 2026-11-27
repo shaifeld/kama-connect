@@ -126,14 +126,30 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <label>בנק או חברת אשראי<select id="bank">${opts}</select></label><div id="flds"></div>
 <button id="save">להצפין ולשמור</button>
 ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</button>` : ""}
+<div id="have"></div>
 <p class="muted">הסיסמה מוצפנת במפתח של המאגר שלך, ואי אפשר לקרוא אותה חזרה גם מגיטהאב.</p></div>`);
     const draw = () => {
       $("flds").innerHTML = Object.entries(BANKS[$("bank").value][1]).map(([f, l]) =>
         `<label>${esc(l)}<input id="f_${f}" type="${f === "password" ? "password" : "text"}" autocomplete="off" autocapitalize="off" spellcheck="false" ${/id|num|Digits|nationalID/.test(f) ? 'inputmode="numeric"' : ""}></label>`).join("");
     };
     $("bank").onchange = draw; draw();
+    listHave();
     $("save").onclick = saveBank;
     if ($("done")) $("done").onclick = () => step4().catch((e) => fail("שגיאה בהפעלה: " + e.message));
+  }
+  // בנקים שכבר שמורים במאגר — אפשר להסיר (למשל בנק שדורש קוד חד-פעמי)
+  async function listHave() {
+    let names = [];
+    try { names = ((await gh(`/repos/${S.login}/${REPO}/actions/secrets?per_page=100`)).secrets || []).map((x) => x.name).filter((n) => n.startsWith("KAMA_ACC_")); } catch (e) { return; }
+    for (const n of names) { const id = Object.keys(BANKS).find((k) => "KAMA_ACC_" + k.toUpperCase() === n); if (id && !S.banks.includes(id)) S.banks.push(id); }
+    if (!$("have")) return;
+    $("have").innerHTML = names.length ? `<p class="muted gap">שמורים אצלך:</p>` + names.map((n) => { const id = Object.keys(BANKS).find((k) => "KAMA_ACC_" + k.toUpperCase() === n); return `<button class="ghost" data-del="${esc(n)}">להסיר: ${esc(id ? BANKS[id][0] : n)}</button>`; }).join("") : "";
+    if (S.banks.length && !$("done")) { const d = document.createElement("button"); d.className = "ghost"; d.id = "done"; d.textContent = "סיימתי להוסיף"; $("save").after(d); d.onclick = () => step4().catch((e) => fail("שגיאה בהפעלה: " + e.message)); }
+    $("have").querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
+      if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "ללחוץ שוב לאישור ההסרה"; return; }
+      b.disabled = true;
+      try { await gh(`/repos/${S.login}/${REPO}/actions/secrets/${b.dataset.del}`, { method: "DELETE" }); S.banks = S.banks.filter((k) => "KAMA_ACC_" + k.toUpperCase() !== b.dataset.del); step3("הוסר."); } catch (e) { b.disabled = false; alert("ההסרה נכשלה: " + e.message); }
+    });
   }
   async function saveBank() {
     const id = $("bank").value, creds = { companyId: id };
