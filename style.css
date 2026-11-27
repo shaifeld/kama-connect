@@ -12,3 +12,4 @@ ul{padding-inline-start:20px}#qr{background:#fff;padding:10px;border-radius:10px
 code{word-break:break-all;font-size:12px;background:#111;padding:6px;border-radius:8px;display:block;direction:ltr;text-align:left}
 .gap{margin-top:16px}
 label input[type=checkbox]{width:22px;min-height:22px;margin-inline-end:8px;vertical-align:middle}
+.hide{display:none}

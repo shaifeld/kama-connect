@@ -202,9 +202,10 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
 <p class="muted">המשיכה הראשונה רצה עכשיו ולוקחת כמה דקות.</p>
 <p class="muted">חשוב: להדביק את הקוד הזה באפליקציה. קוד ישן כבר לא יעבוד.</p>
 <div id="live" class="card"><p>${started ? "המשיכה רצה עכשיו. אם הבנק ישלח קוד SMS, תופיע כאן תיבה להקליד אותו." : "המשיכה תרוץ בלילה."}</p></div>
-<b>להעביר לאפליקציה</b><p class="muted">באפליקציה: תפריט ← חיבור בנק ← "הדבקת קוד" או "סריקה".</p>
+<div id="xfer" class="${started ? "hide" : ""}"><b>להעביר לאפליקציה</b><p class="muted">באפליקציה: תפריט ← "חיבור ישיר לבנק" ← להדביק בשדה "קוד החיבור" ← "לחבר ולמשוך". אין הגבלת זמן.</p>
 <div id="qr">${q.createImgTag(4, 8)}</div>
-<button id="cp">להעתיק קוד</button>
+<button id="cp">להעתיק קוד</button></div>
+${started ? `<p class="muted" id="xwait">הקוד לאפליקציה יופיע כאן כשהמשיכה תסתיים (בערך 2–4 דקות), כדי שהתנועות כבר יהיו מוצפנות במפתח החדש.</p>` : ""}
 <button class="ghost" id="fin">סיימתי — למחוק מהדף</button>
 <p class="muted">הקוד הזה הוא המפתח לנתונים שלך. לא לשלוח אותו לאף אחד.</p></div>`);
     $("cp").onclick = async () => { try { await navigator.clipboard.writeText(code); $("cp").textContent = "הועתק ✓"; } catch (e) { prompt("להעתיק:", code); } };
@@ -215,6 +216,7 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
   // מעקב אחרי הריצה: מציג תיבה לקוד SMS כשהבנק מבקש, ואת התוצאה בסוף
   async function getFile(path) { try { const j = await gh(`/repos/${S.login}/${REPO}/contents/${path}?t=${Date.now()}`); return decodeURIComponent(escape(atob(j.content.replace(/\n/g, "")))); } catch (e) { return null; } }
   async function watchRun(t0) {
+    setTimeout(() => { if ($("xfer")) $("xfer").classList.remove("hide"); if ($("xwait")) $("xwait").remove(); }, 15 * 60e3);
     S.live = true; let asked = 0;
     const live = (h) => { if ($("live")) $("live").innerHTML = h; };
     while (S.live && Date.now() - t0 < 15 * 60e3) {
@@ -236,7 +238,7 @@ ${S.banks.length ? `<button class="ghost" id="done">סיימתי להוסיף</b
       }
       const st = await getFile("status.json");
       if (st) { let j; try { j = JSON.parse(st); } catch (e) { j = null; }
-        if (j && Date.parse(j.at) > t0 - 60e3) { live(`<b>${j.ok ? '<span class="ok">המשיכה הצליחה ✓</span>' : '<span class="err">המשיכה הסתיימה עם בעיה</span>'}</b>` + Object.entries(j.banks || {}).map(([k, v]) => `<p>${esc(BANKS[k] ? BANKS[k][0] : k)}: ${esc(v)}</p>`).join("")); return; } }
+        if (j && Date.parse(j.at) > t0 - 60e3) { if ($("xfer")) $("xfer").classList.remove("hide"); if ($("xwait")) $("xwait").remove(); live(`<b>${j.ok ? '<span class="ok">המשיכה הצליחה ✓</span>' : '<span class="err">המשיכה הסתיימה עם בעיה</span>'}</b>` + Object.entries(j.banks || {}).map(([k, v]) => `<p>${esc(BANKS[k] ? BANKS[k][0] : k)}: ${esc(v)}</p>`).join("")); return; } }
     }
   }
 
